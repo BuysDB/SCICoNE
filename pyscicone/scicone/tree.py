@@ -336,11 +336,15 @@ class Tree(object):
     def set_gene_event_dicts(self, region_gene_map):
         for node in self.node_dict:
             self.node_dict[node]['gene_event_dict'] = dict()
-            if node != '0':
-                for region in self.node_dict[node]['region_event_dict']:
-                    for gene in region_gene_map[int(region)]:
-                        if gene != "":
-                            self.node_dict[node]['gene_event_dict'][gene] = self.node_dict[node]['region_event_dict'][region]
+            if node == '0':
+                continue
+            for region in self.node_dict[node]['region_event_dict']:
+
+                for gene in region_gene_map.get(int(region),[""]): # region_gene_map might be truncated
+                    if gene == "":
+                        continue
+
+                    self.node_dict[node]['gene_event_dict'][gene] = self.node_dict[node]['region_event_dict'][region]
 
     def set_graphviz_str(self, root_label='Neutral', node_sizes=True, node_labels=True, color="#E6E6FA", event_fontsize=14, nodesize_fontsize=14,
                                 nodelabel_fontsize=14, gene_labels=False, gene_list=None, tumor_type=None):
