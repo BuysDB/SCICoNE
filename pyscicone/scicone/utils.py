@@ -103,7 +103,12 @@ def set_region_neutral_states(all_region_stops, known_region_stops, known_region
 
     start_region = 0
     for i, known_stop in enumerate(known_region_stops): # known stops
+
         # Region with breakpoint matching the known stop
+        # it can be the region is just never segmented ? This means end_region is not defined
+        if not known_stop in all_region_stops:
+            continue
+
         end_region = np.where(all_region_stops==known_stop)[0][0].astype(int)
 
         # Set all the regions between the last known stop and the current stop to the known neutral state
