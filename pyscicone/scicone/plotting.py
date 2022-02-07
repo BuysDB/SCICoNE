@@ -11,6 +11,8 @@ import matplotlib.colors as colors
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from matplotlib.gridspec import GridSpec
 import seaborn as sns
+from matplotlib import ticker
+matplotlib.rcParams['font.family'] = 'Helvetica'
 
 # sns.set_style("ticks", {"axes.grid": True})
 sns.set_style("white")
@@ -295,6 +297,11 @@ def plot_matrix(data, cbar_title="", mode='data', chr_stops_dict=None,
 
     data_ = np.array(data, copy=True)
 
+    unique_labels=None
+    ticks = None
+    clonebar = None
+    clonecmap = None
+
     fig = plt.figure(figsize=figsize, dpi=dpi)
     if labels is not None:
         labels = np.array(labels).ravel()
@@ -335,17 +342,18 @@ def plot_matrix(data, cbar_title="", mode='data', chr_stops_dict=None,
         ax.yaxis.set_label_position("left")
         for j, lab in enumerate(ticks.keys()):
             cb.ax.text(
-                0.5,
-                ((bounds[j + 1] + bounds[j]) / 2) / bounds[-1],
+                cb.ax.get_xlim()[-1]*0.5,
+                ((bounds[j + 1] + bounds[j]) / 2) ,
                 lab,
                 ha="center",
                 va="center",
-                rotation=90,
+                rotation=clone_label_rotation,
                 color="w",
                 fontsize=tickfontsize,
             )
         cb.set_ticks([])
 
+        clonebar = cb
         ax = fig.add_subplot(gs[1])
     else:
         ax = plt.gca()
@@ -358,6 +366,13 @@ def plot_matrix(data, cbar_title="", mode='data', chr_stops_dict=None,
     ax = plt.gca()
     plt.ylabel('Cells', fontsize=textfontsize)
     plt.xlabel('Bins', fontsize=textfontsize)
+
+    if ticks is not None:
+        # Add horizontal lines for clones:
+        for loc in ticks.values():
+            ax.axhline(loc,c='grey',linewidth=0.5)
+
+
     if bps is not None:
         ax.vlines(bps, *ax.get_ylim(), colors="k", linestyles="dashed", linewidth=2.)
     if chr_stops_dict is not None:
@@ -365,20 +380,32 @@ def plot_matrix(data, cbar_title="", mode='data', chr_stops_dict=None,
         chr_stops_bins = list(chr_stops_dict.values())
         chr_means = []
         chr_means.append(chr_stops_bins[0] / 2)
+        chr_sizes = []
+        prev=0
         for c in range(1, len(chr_stops_bins)):
             aux = (chr_stops_bins[c] + chr_stops_bins[c - 1]) / 2
             chr_means.append(aux)
+            chr_sizes.append(chr_stops_bins[c-1]-prev)
+            prev = chr_stops_bins[c-1]
         chrs_ = deepcopy(chr_stops_chrs)
-        chrs_[12] = f'{chr_stops_chrs[12]} '
-        chrs_[12]
-        chrs_[20] = ""
-        chrs_[21] = f'  {chr_stops_chrs[21]}'
-        plt.xticks(chr_means, np.array(chrs_), rotation=0, fontsize=tickfontsize)
-        ax.vlines(list(chr_stops_dict.values())[:-1], *ax.get_ylim(), ls='--', linewidth=2.5)
+
+        major_contig_ticks = ticker.FixedLocator(chr_means)
+        ax.xaxis.set_major_locator(major_contig_ticks)
+
+        #plt.xticks(major_contig_ticks, np.array(chrs_), rotation=0, fontsize=tickfontsize)
+        ax.set_xticklabels(chrs_,minor=False,fontsize=tickfontsize)
+
+        ax.vlines(list(chr_stops_dict.values())[:-1], *ax.get_ylim(),  linewidth=2.5, colors='k')
         plt.xlabel('Chromosomes', fontsize=textfontsize)
 
-    for tick in ax.xaxis.get_major_ticks():
-        tick.label.set_fontsize(tickfontsize)
+        # Plot small contig label a bit smaller;;
+        for i,(contig,size) in enumerate(zip(chrs_,chr_sizes)):
+            t = ax.xaxis.get_major_ticks()[i]
+            if size/sum(chr_sizes)<0.015:
+                t.label.set_fontsize( tickfontsize*0.5 )
+            print(contig,size,size/sum(chr_sizes))
+
+
     for tick in ax.yaxis.get_major_ticks():
         tick.label.set_fontsize(tickfontsize)
     if labels is not None:
@@ -400,6 +427,7 @@ def plot_matrix(data, cbar_title="", mode='data', chr_stops_dict=None,
     if mode == 'cnv':
         im.set_clim(vmin=0, vmax=vmax)
         tick_locs = (np.arange(vmax+1) + 0.5)*(vmax)/(vmax+1)
+
         cb.set_ticks(tick_locs)
         # cb.set_ticks([0.4, 1.2, 2, 2.8, 3.6])
         ticklabels = np.arange(0, vmax+1).astype(int).astype(str)
@@ -419,5 +447,7 @@ def plot_matrix(data, cbar_title="", mode='data', chr_stops_dict=None,
         plt.savefig(output_path, bbox_inches="tight", transparent=False)
         plt.close()
         print("Done.")
-    else:
-        plt.show()
+    #else:
+    #   plt.show()
+
+    return ticks,clonebar,clonecmap, unique_labels
