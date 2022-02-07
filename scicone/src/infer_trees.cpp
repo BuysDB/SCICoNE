@@ -54,7 +54,7 @@ int main( int argc, char* argv[]) {
     int n_nodes = 3;
     lambda_r = 0.1;
     lambda_c = 0.2;
-    cf = 1.0;
+    cf = 0.0;
     c_penalise = 10.0;
     is_overdispersed = 1;
     eta = 1e-4;
@@ -191,6 +191,7 @@ int main( int argc, char* argv[]) {
     if (not max_scoring) {
        std::cout << "Will perform sum scoring." << std::endl;
 	   max_scoring = false;
+       cf = 1.0;
        // ES and CA moves are only available in max_scoring mode
        move_probs[11] = 0.0f;
        move_probs[12] = 0.0f;
@@ -232,7 +233,7 @@ int main( int argc, char* argv[]) {
     if (result.count("tree_file")) // starting tree is specified
         mcmc.initialize_from_file(tree_file);
 
-    bool learn_nu = static_cast<bool>(move_probs[11]); // if move 11 is probable
+    bool learn_nu = static_cast<bool>(move_probs[13]); // if move is probable
 
     if(learn_nu)
     {
