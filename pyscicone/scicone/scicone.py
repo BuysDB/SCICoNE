@@ -182,7 +182,7 @@ class SCICoNE(object):
         return output
 
     def detect_breakpoints(self, data=None, window_size=30, threshold=3.0, bp_limit=300, bp_min=0, lr=None, sp=None,
-                            evaluate_peaks=True, compute_lr=True, compute_sp=True, input_breakpoints=None, verbosity=1):
+                            evaluate_peaks=True, compute_lr=True, compute_sp=True, input_breakpoints=None, verbosity=1, map_genes=True):
         if data is None:
             data = self.data['filtered_counts']
 
@@ -264,12 +264,14 @@ class SCICoNE(object):
             print("OSError: ", e.output, e.stdout, e.stderr)
 
         self.bps = output
-        if 'unfiltered_chromosome_stops' in self.data.keys():
-            print('Mapping to genes...')
-            self.region_gene_map = utils.get_region_gene_map(self.data['bin_size'], self.data['unfiltered_chromosome_stops'],
-                                    self.bps['segmented_regions'], self.data['excluded_bins'])
-            print('Done.')
-
+        if map_genes:
+            if 'unfiltered_chromosome_stops' in self.data.keys():
+                print('Mapping to genes...')
+                self.region_gene_map = utils.get_region_gene_map(self.data['bin_size'], self.data['unfiltered_chromosome_stops'],
+                                        self.bps['segmented_regions'], self.data['excluded_bins'])
+                print('Done.')
+        else:
+            self.region_gene_map = {}
         return output
 
     def condense_regions(self, data, segmented_region_sizes):
@@ -371,8 +373,8 @@ class SCICoNE(object):
         # Assess convergence
         robustness_score = np.count_nonzero(np.isclose(np.array(scores), best_tree.score, atol=5)) / n_reps
 
-        return best_tree, robustness_score, trees
 
+        return best_tree, robustness_score, trees
     def learn_tree(self, data=None, segmented_region_sizes=None, n_reps=10, cluster=True, full=True, cluster_tree_n_iters=4000, nu_tree_n_iters=4000, full_tree_n_iters=4000, max_tries=2, robustness_thr=0.5, min_cluster_size=1, **kwargs):
         if segmented_region_sizes is None:
             segmented_region_sizes = self.bps['segmented_region_sizes']
