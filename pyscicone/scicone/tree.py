@@ -252,7 +252,7 @@ class Tree(object):
                    lambda_r=0.2,  # lambda param for the poisson that generates the number of regions
                    lambda_c=0.1,  # l 	lambda param for the poisson that generates the copy number state of a region
                    ploidy=2,
-                   verbosity=1,
+                   verbosity=2,
                    verbose=False,
                    num_labels=False):
 
