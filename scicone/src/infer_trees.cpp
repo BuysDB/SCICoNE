@@ -27,6 +27,7 @@ unsigned is_overdispersed;
 string f_name_posfix;
 int verbosity;
 double eta;
+double beta;
 
 // endof globals
 
@@ -58,6 +59,11 @@ int main( int argc, char* argv[]) {
     c_penalise = 10.0;
     is_overdispersed = 1;
     eta = 1e-4;
+    // Penalty on number of genotypes
+    beta = 0.0;
+    // And its adaptation through iterations
+    double beta_rate = 0.1;
+    double n_genotypes_target = 10;
 
     // set the globals
     print_precision = 15;
@@ -111,6 +117,9 @@ int main( int argc, char* argv[]) {
             ("move_probs","The vector of move probabilities",cxxopts::value(move_probs)->default_value(move_probs_str))
             ("max_scoring","Boolean parameter to decide whether to take the maximum score or to marginalize over all assignments during inference",cxxopts::value<bool>(max_scoring)->default_value("true"))
             ("region_neutral_states_file", "Path to the file containing the neutral state of each region to use as the root of the tree", cxxopts::value(region_neutral_states_file))
+            ("beta", "term that penalises the number of genotypes in the tree", cxxopts::value(beta))
+            ("beta_rate", "term that specifies how beta is updated across iterations", cxxopts::value(beta_rate))
+            ("n_genotypes_target", "number of genotypes that beta penalty should favor", cxxopts::value(n_genotypes_target))
             ;
 
     auto result = options.parse(argc, argv);
@@ -154,22 +163,29 @@ int main( int argc, char* argv[]) {
     }
     if (result.count("tree_file")) // undo random_init
         random_init = false;
-    if(result.count("alpha"))
-        std::cout<<"the learning rate alpha constant is specified to be " << alpha <<std::endl;
-    else
-        std::cout<<"the learning rate alpha constant is " << alpha << " since it is not specified" <<std::endl;
-    if(result.count("gamma"))
-        std::cout<<"initial gamma is specified to be " << gamma <<std::endl;
-    else
-        std::cout<<"gamma value is not specified, the default value is: " << gamma <<std::endl;
-    if (result.count("cf"))
-        std::cout<<"Cluster fraction in tree prior is: " << cf << std::endl;
 
-    std::cout << "Reading the input matrix..." << std::endl;
+    if (verbosity > 0) {
+        if(result.count("alpha"))
+            std::cout<<"the learning rate alpha constant is specified to be " << alpha <<std::endl;
+        else
+            std::cout<<"the learning rate alpha constant is " << alpha << " since it is not specified" <<std::endl;
+        if(result.count("gamma"))
+            std::cout<<"initial gamma is specified to be " << gamma <<std::endl;
+        else
+            std::cout<<"gamma value is not specified, the default value is: " << gamma <<std::endl;
+        if (result.count("cf"))
+            std::cout<<"Cluster fraction in tree prior is: " << cf << std::endl;
+        if (result.count("beta"))
+            std::cout<<"beta in tree prior is: " << beta << std::endl;
+    }
+
+    if (verbosity > 0)
+        std::cout << "Reading the input matrix..." << std::endl;
     vector<vector<double>> d_regions(n_cells, vector<double>(n_regions));
     Utils::read_counts(d_regions, d_matrix_file);
 
-    std::cout << "Reading the region_sizes file..." << std::endl;
+    if (verbosity > 0)
+        std::cout << "Reading the region_sizes file..." << std::endl;
     vector<int> region_sizes;
     Utils::read_vector(region_sizes, region_sizes_file);
 
@@ -177,7 +193,8 @@ int main( int argc, char* argv[]) {
     bool read_cluster_sizes = false;
     if (result.count("cluster_sizes_file")) {
       if (cluster_sizes_file.compare("") != 0) {
-        std::cout << "Reading the cluster_sizes file..." << std::endl;
+        if (verbosity > 0)
+            std::cout << "Reading the cluster_sizes file..." << std::endl;
         Utils::read_vector(cluster_sizes, cluster_sizes_file);
         read_cluster_sizes = true;
       }
@@ -189,14 +206,16 @@ int main( int argc, char* argv[]) {
     }
 
     if (not max_scoring) {
-       std::cout << "Will perform sum scoring." << std::endl;
-	   max_scoring = false;
+       if (verbosity > 0)
+           std::cout << "Will perform sum scoring." << std::endl;
        cf = 1.0;
+	     max_scoring = false;
        // ES and CA moves are only available in max_scoring mode
        move_probs[11] = 0.0f;
        move_probs[12] = 0.0f;
    } else {
-       std::cout << "Will perform maximum scoring." << std::endl;
+       if (verbosity > 0)
+           std::cout << "Will perform maximum scoring." << std::endl;
        move_probs.back() = 0.0f; // no need to prune tree;
    }
 
@@ -204,13 +223,15 @@ int main( int argc, char* argv[]) {
     bool read_region_neutral_states = false;
     if (result.count("region_neutral_states_file")) {
       if (region_neutral_states_file.compare("") != 0) {
-        std::cout << "Reading the region_neutral_states file..." << std::endl;
+        if (verbosity > 0)
+            std::cout << "Reading the region_neutral_states file..." << std::endl;
         Utils::read_vector(region_neutral_states, region_neutral_states_file);
         read_region_neutral_states = true;
       }
     }
     if (not read_region_neutral_states) {
-      std::cout << "Assuming root to have copy number state " << ploidy << " in all regions" << std::endl;
+      if (verbosity > 0)
+        std::cout << "Assuming root to have copy number state " << ploidy << " in all regions" << std::endl;
       region_neutral_states = std::vector<int>(n_regions, ploidy);
     }
 
@@ -220,7 +241,8 @@ int main( int argc, char* argv[]) {
     if (random_init)
     {
         int max_iters = 10000;
-        std::cout<<"Trying to randomly initialise a valid tree with " << max_iters << " iterations." << std::endl;
+        if (verbosity > 0)
+            std::cout<<"Trying to randomly initialise a valid tree with " << max_iters << " iterations." << std::endl;
         try {
             mcmc.random_initialize(n_nodes, n_regions, max_iters); // creates a random tree
         }catch (const std::runtime_error& e)
@@ -230,8 +252,10 @@ int main( int argc, char* argv[]) {
             return EXIT_FAILURE; // reject the move
         }
     }
-    if (result.count("tree_file")) // starting tree is specified
+    if (result.count("tree_file")) { // starting tree is specified
         mcmc.initialize_from_file(tree_file);
+        nu = mcmc.t.nu;
+    }
 
     bool learn_nu = static_cast<bool>(move_probs[13]); // if move is probable
 
@@ -240,11 +264,13 @@ int main( int argc, char* argv[]) {
         if(result.count("nu"))
         {
             mcmc.t.nu = mcmc.t_prime.nu = nu;
-            std::cout<<"Nu is given and going to be updated further by the chain"<<std::endl;
+            if (verbosity > 0)
+                std::cout<<"Nu is given and going to be updated further by the chain"<<std::endl;
         }
         else
         {
-            std::cout<<"Nu is not given and going to be learned from the data"<<std::endl;
+            if (verbosity > 0)
+                std::cout<<"Nu is not given and going to be learned from the data"<<std::endl;
         }
     }
     else
@@ -252,17 +278,20 @@ int main( int argc, char* argv[]) {
         if(result.count("nu"))
         {
             mcmc.t.nu = mcmc.t_prime.nu = nu;
-            std::cout<<"Nu is given and not going to be changed"<<std::endl;
+            if (verbosity > 0)
+                std::cout<<"Nu is given and not going to be changed"<<std::endl;
         }
         else
         {
             //non-overdispersed version
             is_overdispersed = 0;
-            std::cout<<"Non-overdispersed tree setting"<<std::endl;
+            if (verbosity > 0)
+                std::cout<<"Non-overdispersed tree setting"<<std::endl;
         }
     }
 
-    std::cout << "Computing the t table and overdispersion scores for the initial tree..." << std::endl;
+    if (verbosity > 0)
+        std::cout << "Computing the t table and overdispersion scores for the initial tree..." << std::endl;
     mcmc.compute_t_table(d_regions,region_sizes,cluster_sizes);
     mcmc.compute_t_od_scores(d_regions, region_sizes,cluster_sizes);
 
@@ -271,18 +300,21 @@ int main( int argc, char* argv[]) {
     // Get starting timepoint
     auto start = high_resolution_clock::now();
 
-    std::cout << "Inferring the tree using MCMC with " << n_iters << " iterations..." << std::endl;
-    mcmc.infer_mcmc(d_regions, region_sizes, move_probs, n_iters, size_limit, alpha, gamma, cluster_sizes);
+    if (verbosity > 0)
+        std::cout << "Inferring the tree using MCMC with " << n_iters << " iterations..." << std::endl;
+    mcmc.infer_mcmc(d_regions, region_sizes, move_probs, n_iters, size_limit, alpha, gamma, beta_rate, n_genotypes_target, cluster_sizes);
 
     // Get ending timepoint
     auto stop = high_resolution_clock::now();
 
     auto duration = duration_cast<microseconds>(stop - start);
 
-    std::cout << "Time taken by infer_mcmc function: "
-         << duration.count() << " microseconds" << std::endl;
+    if (verbosity > 0)
+        std::cout << "Time taken by infer_mcmc function: "
+             << duration.count() << " microseconds" << std::endl;
 
-    std::cout << "Writing the inferred tree and cnvs..." <<std::endl;
+    if (verbosity > 0)
+        std::cout << "Writing the inferred tree and cnvs..." <<std::endl;
 
     vector<vector<int>> inferred_cnvs = mcmc.assign_cells_to_nodes(d_regions, region_sizes, cluster_sizes); // returns the inferred CNVs
 
@@ -308,7 +340,7 @@ int main( int argc, char* argv[]) {
         inferred_cnvs_file << endl;
     }
 
-    if (verbosity > 0)
+    if (verbosity > 1)
     {
       // write score matrix
       std::ofstream attachment_scores_file("./" + f_name_posfix + "_attachment_scores" + ".csv");
@@ -327,6 +359,7 @@ int main( int argc, char* argv[]) {
       }
     }
 
-    std::cout << "Tree inference is successfully completed!" <<std::endl;
+    if (verbosity > 0)
+        std::cout << "Tree inference is successfully completed!" <<std::endl;
     return EXIT_SUCCESS;
 }
